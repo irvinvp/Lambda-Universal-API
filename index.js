@@ -1,3 +1,4 @@
+const https = require("https");
 const AWS = require("aws-sdk");
 const dynamo = new AWS.DynamoDB.DocumentClient();
 const zlib = require("zlib");
@@ -54,9 +55,7 @@ async function get(event) {
         return { status: 404, error: "id is required" };
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
-      if ((await _level(event.query.token)) < 0)
-        return { status: 405, error: "access denied" };
-      level = await _level(event.query.token);
+      level = await _level(event.query.token, event.ip);
       if (level < 0 || (event.query.id[0] == "_" && level != 99))
         return { status: 405, error: "access denied" };
       return await _read(event.query.id);
@@ -65,7 +64,7 @@ async function get(event) {
         return { status: 404, error: "id is required" };
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
-      level = await _level(event.query.token);
+      level = await _level(event.query.token, event.ip);
       if (level < 0 || (event.query.id[0] == "_" && level != 99))
         return { status: 405, error: "access denied" };
       return await _delete(event.query.id);
@@ -82,14 +81,14 @@ async function post(event) {
         return { status: 404, error: "id is required" };
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
-      level = await _level(event.query.token);
+      level = await _level(event.query.token, event.ip);
       if (level < 0 || (event.query.id[0] == "_" && level != 99))
         return { status: 405, error: "access denied" };
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
       return await _save(event.query.id, event.body);
     case "/api/v1/login":
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
-      return await _login(_safe(event.body));
+      return await _login(_safe(event.body), event.ip);
     default:
       return { status: 404, error: "Path not allowed", ip: event.ip };
   }
@@ -165,7 +164,11 @@ async function _ip(ip) {
   ip_baned[ip]++;
 }
 // Login
-async function _login(data) {
+async function _login(data, ip) {
+  let country = await fetch("https://ipinfo.io/" + ip + "/country");
+  if (country != "MX\n")
+    return { status: 400, error: "access denied (region)", region: country };
+
   let users = await _read("_users");
   if (users.Item === undefined)
     return { status: 404, error: "Users not found" };
@@ -176,21 +179,41 @@ async function _login(data) {
     Math.random().toString(36).substring(2) +
     Math.random().toString(36).substring(2) +
     Math.random().toString(36).substring(2);
-  token_ram[users.Item.data[data.key].token];
+  delete token_ram[users.Item.data[data.key].token];
   users.Item.data[data.key].token = token;
+  users.Item.data[data.key].ip = ip;
   await _save("_users", JSON.stringify(users.Item.data));
   return { status: 200, token: token };
 }
 // Get level
-async function _level(token) {
-  if (token_ram[token] != undefined) return token_ram[token];
+async function _level(token, ip) {
+  // RAM fast cache
+  if (token_ram[token] != undefined) {
+    if (token_ram[token].ip == ip) {
+      return token_ram[token].level;
+    }
+  }
   let users = await _read("_users");
   if (users.Item === undefined) return -1;
   for (let x in users.Item.data) {
-    if (users.Item.data[x].token == token) {
-      token_ram[token] = users.Item.data[x].level;
+    if (users.Item.data[x].token == token && users.Item.data[x].ip == ip) {
+      token_ram[token] = { level: users.Item.data[x].level, ip: ip };
       return users.Item.data[x].level;
     }
   }
   return -1;
+}
+async function fetch(url) {
+  return new Promise((resolve) => {
+    https.get(url, (res) => {
+      if (res.statusCode != 200) return resolve("MX\n");
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
+        resolve(data);
+      });
+    });
+  });
 }
