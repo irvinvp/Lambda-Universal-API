@@ -190,7 +190,6 @@ async function _login(data, ip) {
   let country = await fetch("https://ipinfo.io/" + ip + "/country");
   if (country != "MX\n")
     return { status: 400, error: "access denied (region)", region: country };
-
   let users = await _read("_users");
   if (users.Item === undefined)
     return { status: 404, error: "Users not found" };
