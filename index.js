@@ -68,6 +68,28 @@ async function get(event) {
       if (level < 0 || (event.query.id[0] == "_" && level != 99))
         return { status: 405, error: "access denied" };
       return await _delete(event.query.id);
+    case "/api/v1/users_add":
+      if (event.query.name === undefined)
+        return { status: 404, error: "name is required" };
+      if (event.query.key === undefined)
+        return { status: 404, error: "key is required" };
+      if (event.query.level === undefined)
+        return { status: 404, error: "level is required" };
+      if (event.query.token === undefined)
+        return { status: 404, error: "token is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level != 99) return { status: 405, error: "access denied" };
+      return await _users_add(
+        event.query.name,
+        event.query.key,
+        event.query.level
+      );
+    case "/api/v1/users_del":
+      if (event.query.name === undefined)
+        return { status: 404, error: "name is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level != 99) return { status: 405, error: "access denied" };
+      return await _users_del(event.query.name);
     default:
       return { status: 404, error: "Path not allowed", ip: event.ip };
   }
@@ -202,6 +224,29 @@ async function _level(token, ip) {
     }
   }
   return -1;
+}
+// Add user
+async function _users_add(name, key, level) {
+  let users = await _read("_users");
+  if (users.Item === undefined)
+    return { status: 404, error: "Users not found" };
+  users.Item.data[key] = { name: name, level: level, token: "", ip: "" };
+  await _save("_users", JSON.stringify(users.Item.data));
+  return { status: 200 };
+}
+// Delete user
+async function _users_del(name) {
+  let users = await _read("_users");
+  if (users.Item === undefined)
+    return { status: 404, error: "Users not found" };
+  for (let x in users.Item.data) {
+    if (users.Item.data[x].name == name) {
+      delete users.Item.data[x];
+      await _save("_users", JSON.stringify(users.Item.data));
+      return { status: 200 };
+    }
+  }
+  return { status: 404, error: "User not found" };
 }
 async function fetch(url) {
   return new Promise((resolve) => {
