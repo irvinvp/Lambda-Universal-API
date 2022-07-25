@@ -180,11 +180,15 @@ async function _push(id, data) {
   try {
     data = JSON.parse(data);
     if (r.status === 200) {
-      if (Array.isArray(r.Item.data)) {
-        if (!r.Item.data.includes(data[0])) r.Item.data.push(data[0]);
-        return await _save(id, JSON.stringify(r.Item.data));
+      if (r.Item != undefined) {
+        if (Array.isArray(r.Item.data)) {
+          if (!r.Item.data.includes(data[0])) r.Item.data.push(data[0]);
+          return await _save(id, JSON.stringify(r.Item.data));
+        } else {
+          return { status: 404, err: "Not an array" };
+        }
       } else {
-        return { status: 404, err: "Not an array" };
+        return await _save(id, JSON.stringify([data[0]]));
       }
     } else {
       return r;
@@ -199,11 +203,15 @@ async function _put(id, data) {
   try {
     data = JSON.parse(data);
     if (r.status === 200) {
-      if (!Array.isArray(r.Item.data) && typeof r.Item.data === "object") {
-        r.Item.data[Object.keys(data)[0]] = data[Object.keys(data)[0]];
-        return await _save(id, JSON.stringify(r.Item.data));
+      if (r.Item != undefined) {
+        if (!Array.isArray(r.Item.data) && typeof r.Item.data === "object") {
+          r.Item.data[Object.keys(data)[0]] = data[Object.keys(data)[0]];
+          return await _save(id, JSON.stringify(r.Item.data));
+        } else {
+          return { status: 404, err: "Not an object" };
+        }
       } else {
-        return { status: 404, err: "Not an object" };
+        return await _save(id, JSON.stringify(data));
       }
     } else {
       return r;
