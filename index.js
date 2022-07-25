@@ -2,7 +2,8 @@ const https = require("https");
 const AWS = require("aws-sdk");
 const dynamo = new AWS.DynamoDB.DocumentClient();
 const zlib = require("zlib");
-const table_name = ""; // Nombre de la tabla DynamoDB
+const table_name = "test"; // Nombre de la tabla DynamoDB
+const app = "_test";
 let token_ram = {};
 let ip_baned = {};
 let lambda_id = Math.random().toString(36).substring(2);
@@ -163,7 +164,7 @@ async function _save(id, data) {
         .put({
           TableName: table_name,
           Item: {
-            id: id,
+            id: id + app,
             data: data,
           },
         })
@@ -218,11 +219,14 @@ async function _read(id) {
       .get({
         TableName: table_name,
         Key: {
-          id: id,
+          id: id + app,
         },
       })
       .promise();
-    if (r.Item != undefined) r.Item.data = _safe(r.Item.data);
+    if (r.Item != undefined) {
+      r.Item.data = _safe(r.Item.data);
+      r.Item.id = r.Item.id.replace(app, "");
+    }
     return {
       status: 200,
       ...r,
@@ -240,7 +244,7 @@ async function _delete(id) {
         .delete({
           TableName: table_name,
           Key: {
-            id: id,
+            id: id + app,
           },
         })
         .promise()),
