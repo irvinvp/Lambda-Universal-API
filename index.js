@@ -68,6 +68,17 @@ async function get(event) {
       if (level < 0 || (event.query.id[0] == "_" && level != 99))
         return { status: 405, error: "access denied" };
       return await _delete(event.query.id);
+    case "/api/v1/delete_key":
+      if (event.query.id === undefined)
+        return { status: 404, error: "id is required" };
+      if (event.query.key === undefined)
+        return { status: 404, error: "key is required" };
+      if (event.query.token === undefined)
+        return { status: 404, error: "token is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+        return { status: 405, error: "access denied" };
+      return await _delete_key(event.query.id, event.query.key);
     case "/api/v1/users_add":
       if (event.query.name === undefined)
         return { status: 404, error: "name is required" };
@@ -108,6 +119,26 @@ async function post(event) {
         return { status: 405, error: "access denied" };
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
       return await _save(event.query.id, event.body);
+    case "/api/v1/push":
+      if (event.query.id === undefined)
+        return { status: 404, error: "id is required" };
+      if (event.query.token === undefined)
+        return { status: 404, error: "token is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+        return { status: 405, error: "access denied" };
+      if (!_safe(event.body)) return { status: 404, error: "body is required" };
+      return await _push(event.query.id, event.body);
+    case "/api/v1/put":
+      if (event.query.id === undefined)
+        return { status: 404, error: "id is required" };
+      if (event.query.token === undefined)
+        return { status: 404, error: "token is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+        return { status: 405, error: "access denied" };
+      if (!_safe(event.body)) return { status: 404, error: "body is required" };
+      return await _put(event.query.id, event.body);
     case "/api/v1/login":
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
       return await _login(_safe(event.body), event.ip);
@@ -138,6 +169,44 @@ async function _save(id, data) {
         })
         .promise()),
     };
+  } catch (err) {
+    return { status: 404, ...err };
+  }
+}
+// Push DB
+async function _push(id, data) {
+  let r = await _read(id);
+  try {
+    data = JSON.parse(data);
+    if (r.status === 200) {
+      if (Array.isArray(r.Item.data)) {
+        if (!r.Item.data.includes(data[0])) r.Item.data.push(data[0]);
+        return await _save(id, JSON.stringify(r.Item.data));
+      } else {
+        return { status: 404, err: "Not an array" };
+      }
+    } else {
+      return r;
+    }
+  } catch (err) {
+    return { status: 404, ...err };
+  }
+}
+// Put DB
+async function _put(id, data) {
+  let r = await _read(id);
+  try {
+    data = JSON.parse(data);
+    if (r.status === 200) {
+      if (!Array.isArray(r.Item.data) && typeof r.Item.data === "object") {
+        r.Item.data[Object.keys(data)[0]] = data[Object.keys(data)[0]];
+        return await _save(id, JSON.stringify(r.Item.data));
+      } else {
+        return { status: 404, err: "Not an object" };
+      }
+    } else {
+      return r;
+    }
   } catch (err) {
     return { status: 404, ...err };
   }
@@ -176,6 +245,27 @@ async function _delete(id) {
         })
         .promise()),
     };
+  } catch (err) {
+    return { status: 404, ...err };
+  }
+}
+// Delete key DB
+async function _delete_key(id, key) {
+  let r = await _read(id);
+  try {
+    if (r.status === 200) {
+      if (!Array.isArray(r.Item.data) && typeof r.Item.data === "object") {
+        delete r.Item.data[key];
+        return await _save(id, JSON.stringify(r.Item.data));
+      } else if (Array.isArray(r.Item.data)) {
+        r.Item.data = r.Item.data.filter((x) => x != key);
+        return await _save(id, JSON.stringify(r.Item.data));
+      } else {
+        return { status: 404, err: "Not an object or array" };
+      }
+    } else {
+      return r;
+    }
   } catch (err) {
     return { status: 404, ...err };
   }
