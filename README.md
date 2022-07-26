@@ -1,7 +1,7 @@
 # Lambda Universal API DynamoDB
 API universal para leer, borrar o guardar datos en DyanamoDB, cuenta con sistema de token para usuarios, requiere la creación manual de una variable para el usuario Admin
 ```
-{"sdf7s89df8sd7f":{"token":"","level":99,"ip":"","filters":{}}}
+{"super-secret-key-admin":{"token":"","level":99,"ip":"","filters":{}}}
 ```
 Para leer un registro
 ```
