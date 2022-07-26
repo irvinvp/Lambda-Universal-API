@@ -182,7 +182,9 @@ async function _push(id, data) {
     if (r.status === 200) {
       if (r.Item != undefined) {
         if (Array.isArray(r.Item.data)) {
-          if (!r.Item.data.includes(data[0])) r.Item.data.push(data[0]);
+          for (let x in data) {
+            if (!r.Item.data.includes(data[x])) r.Item.data.push(data[x]);
+          }
           return await _save(id, JSON.stringify(r.Item.data));
         } else {
           return { status: 404, err: "Not an array" };
@@ -205,7 +207,9 @@ async function _put(id, data) {
     if (r.status === 200) {
       if (r.Item != undefined) {
         if (!Array.isArray(r.Item.data) && typeof r.Item.data === "object") {
-          r.Item.data[Object.keys(data)[0]] = data[Object.keys(data)[0]];
+          for (let x in data) {
+            r.Item.data[x] = data[x];
+          }
           return await _save(id, JSON.stringify(r.Item.data));
         } else {
           return { status: 404, err: "Not an object" };
