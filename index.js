@@ -200,7 +200,10 @@ async function _save(id, data) {
           TableName: table_name,
           Item: {
             id: id + app,
-            data: data,
+            data:
+              data.length < 400 * 1024
+                ? data
+                : zlib.gzipSync(data).toString("base64"),
           },
         })
         .promise()),
@@ -271,7 +274,18 @@ async function _read(id) {
       })
       .promise();
     if (r.Item != undefined) {
-      r.Item.data = _safe(r.Item.data);
+      let par_data = _safe(r.Item.data);
+      if (par_data == null) {
+        try {
+          r.Item.data = _safe(
+            zlib.unzipSync(Buffer.from(r.Item.data, "base64")).toString()
+          );
+        } catch (e) {
+          r.Item.data = null;
+        }
+      } else {
+        r.Item.data = par_data;
+      }
       r.Item.id = r.Item.id.replace(app, "");
     }
     return {
