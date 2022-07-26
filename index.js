@@ -381,7 +381,7 @@ async function _level(token, ip) {
       return users.Item.data[x];
     }
   }
-  return -1;
+  return { level: -1 };
 }
 // Add user
 async function _users_add(name, key, level, filters) {
