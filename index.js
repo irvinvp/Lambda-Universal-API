@@ -2,8 +2,8 @@ const https = require("https");
 const AWS = require("aws-sdk");
 const dynamo = new AWS.DynamoDB.DocumentClient();
 const zlib = require("zlib");
-const table_name = "test"; // Nombre de la tabla DynamoDB
-const app = "_test";
+const table_name = "komakai"; // Nombre de la tabla DynamoDB
+const app = "_komakai";
 let token_ram = {};
 let ip_baned = {};
 let lambda_id = Math.random().toString(36).substring(2);
@@ -20,7 +20,7 @@ exports.handler = async (event) => {
         body: JSON.stringify({ error: "IP baned" }),
         headers: {},
       };
-    r = zlib.gzipSync(JSON.stringify(r));
+    r = zlib.gzipSync(JSON.stringify(r, null, 2));
     return {
       body: r.toString("base64"),
       isBase64Encoded: true,
@@ -49,7 +49,7 @@ async function main(event) {
 }
 // Get
 async function get(event) {
-  let level = -1;
+  let level = { level: -1 };
   switch (event.path) {
     case "/api/v1/read":
       if (event.query.id === undefined)
@@ -57,7 +57,7 @@ async function get(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
       return await _read(event.query.id);
     case "/api/v1/delete":
@@ -66,7 +66,7 @@ async function get(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
       return await _delete(event.query.id);
     case "/api/v1/delete_key":
@@ -77,7 +77,7 @@ async function get(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
       return await _delete_key(event.query.id, event.query.key);
     case "/api/v1/users_add":
@@ -90,17 +90,19 @@ async function get(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level != 99) return { status: 405, error: "access denied" };
+      if (level.level != 99) return { status: 405, error: "access denied" };
+      if (event.query.filters === undefined) event.query.filters = {};
       return await _users_add(
         event.query.name,
         event.query.key,
-        event.query.level
+        event.query.level,
+        event.query.filters
       );
     case "/api/v1/users_del":
       if (event.query.name === undefined)
         return { status: 404, error: "name is required" };
       level = await _level(event.query.token, event.ip);
-      if (level != 99) return { status: 405, error: "access denied" };
+      if (level.level != 99) return { status: 405, error: "access denied" };
       return await _users_del(event.query.name);
     default:
       return { status: 404, error: "Path not allowed", ip: event.ip };
@@ -116,7 +118,7 @@ async function post(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
       return await _save(event.query.id, event.body);
@@ -126,7 +128,7 @@ async function post(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
       return await _push(event.query.id, event.body);
@@ -136,7 +138,7 @@ async function post(event) {
       if (event.query.token === undefined)
         return { status: 404, error: "token is required" };
       level = await _level(event.query.token, event.ip);
-      if (level < 0 || (event.query.id[0] == "_" && level != 99))
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
       if (!_safe(event.body)) return { status: 404, error: "body is required" };
       return await _put(event.query.id, event.body);
@@ -317,25 +319,35 @@ async function _level(token, ip) {
   // RAM fast cache
   if (token_ram[token] != undefined) {
     if (token_ram[token].ip == ip) {
-      return token_ram[token].level;
+      return token_ram[token];
     }
   }
   let users = await _read("_users");
   if (users.Item === undefined) return -1;
   for (let x in users.Item.data) {
     if (users.Item.data[x].token == token && users.Item.data[x].ip == ip) {
-      token_ram[token] = { level: users.Item.data[x].level, ip: ip };
-      return users.Item.data[x].level;
+      token_ram[token] = {
+        level: users.Item.data[x].level,
+        ip: ip,
+        filters: users.Item.data[x].filters,
+      };
+      return users.Item.data[x];
     }
   }
   return -1;
 }
 // Add user
-async function _users_add(name, key, level) {
+async function _users_add(name, key, level, filters) {
   let users = await _read("_users");
   if (users.Item === undefined)
     return { status: 404, error: "Users not found" };
-  users.Item.data[key] = { name: name, level: level, token: "", ip: "" };
+  users.Item.data[key] = {
+    name: name,
+    level: level,
+    token: "",
+    ip: "",
+    filters: filters,
+  };
   await _save("_users", JSON.stringify(users.Item.data));
   return { status: 200 };
 }
