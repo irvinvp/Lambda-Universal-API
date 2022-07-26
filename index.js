@@ -71,8 +71,18 @@ async function get(event) {
           for (let x in part.Item.data) {
             for (let y in level.filters) {
               if (part.Item.data[x][y] != undefined) {
-                if (level.filters[y].includes(part.Item.data[x][y])) {
-                  data.push(part.Item.data[x]);
+                if (Array.isArray(part.Item.data[x][y])) {
+                  if (
+                    level.filters[y].some((w) =>
+                      part.Item.data[x][y].includes(w)
+                    )
+                  ) {
+                    data.push(part.Item.data[x]);
+                  }
+                } else {
+                  if (level.filters[y].includes(part.Item.data[x][y])) {
+                    data.push(part.Item.data[x]);
+                  }
                 }
               } else {
                 data.push(part.Item.data[x]);
