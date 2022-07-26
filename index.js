@@ -50,6 +50,7 @@ async function main(event) {
 // Get
 async function get(event) {
   let level = { level: -1 };
+  let part;
   switch (event.path) {
     case "/api/v1/read":
       if (event.query.id === undefined)
@@ -59,7 +60,39 @@ async function get(event) {
       level = await _level(event.query.token, event.ip);
       if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
         return { status: 405, error: "access denied" };
-      return await _read(event.query.id);
+      // Filters
+      if (Object.keys(level.filters).length == 0) {
+        return await _read(event.query.id);
+      } else {
+        part = await _read(event.query.id);
+        if (part.Item == undefined) return part;
+        if (Array.isArray(part.Item.data)) {
+          let data = [];
+          for (let x in part.Item.data) {
+            for (let y in level.filters) {
+              if (part.Item.data[x][y] != undefined) {
+                if (level.filters[y].includes(part.Item.data[x][y])) {
+                  data.push(part.Item.data[x]);
+                }
+              } else {
+                data.push(part.Item.data[x]);
+              }
+            }
+          }
+          part.Item.data = data;
+        } else {
+          for (let x in part.Item.data) {
+            for (let y in level.filters) {
+              if (part.Item.data[x][y] != undefined) {
+                if (!level.filters[y].includes(part.Item.data[x][y])) {
+                  delete part.Item.data[x];
+                }
+              }
+            }
+          }
+        }
+        return part;
+      }
     case "/api/v1/delete":
       if (event.query.id === undefined)
         return { status: 404, error: "id is required" };
