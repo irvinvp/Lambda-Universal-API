@@ -2,6 +2,8 @@ const https = require("https");
 const AWS = require("aws-sdk");
 const dynamo = new AWS.DynamoDB.DocumentClient();
 const zlib = require("zlib");
+const worker1 = require("worker1");
+const { read } = require("fs");
 const table_name = "komakai"; // Nombre de la tabla DynamoDB
 const app = "_komakai";
 let token_ram = {};
@@ -147,6 +149,18 @@ async function get(event) {
       level = await _level(event.query.token, event.ip);
       if (level.level != 99) return { status: 405, error: "access denied" };
       return await _users_del(event.query.name);
+    // Especial
+    case "/api/v1/worker":
+      if (event.query.vars === undefined)
+        return { status: 404, error: "vars is required" };
+      if (event.query.id === undefined)
+        return { status: 404, error: "id is required" };
+      return await worker1.run(
+        event.query.id,
+        event.query.vars.split(","),
+        _read,
+        _save
+      );
     default:
       return { status: 404, error: "Path not allowed", ip: event.ip };
   }
@@ -355,10 +369,12 @@ async function _login(data, ip) {
   let country = await fetch("https://ipinfo.io/" + ip + "/country");
   if (country != "MX\n")
     return { status: 400, error: "access denied (region)", region: country };
-  let users = await _read("_users");
-  if (users.Item === undefined)
-    return { status: 404, error: "Users not found" };
   if (data.key === undefined) return { status: 404, error: "key is required" };
+  let users = await _read("_users");
+  if (users.Item === undefined) {
+    await _users_add("admin", data.key, 99, {});
+    users = await _read("_users");
+  } //return { status: 404, error: "Users not found" };
   if (users.Item.data[data.key] === undefined)
     return { status: 400, error: "key not found" };
   let token =
@@ -382,7 +398,10 @@ async function _level(token, ip) {
   let users = await _read("_users");
   if (users.Item === undefined) return -1;
   for (let x in users.Item.data) {
-    if (users.Item.data[x].token == token && users.Item.data[x].ip == ip) {
+    if (
+      users.Item.data[x].token == token &&
+      (users.Item.data[x].ip == ip || users.Item.data[x].ip == "0")
+    ) {
       token_ram[token] = {
         level: users.Item.data[x].level,
         ip: ip,
@@ -396,8 +415,7 @@ async function _level(token, ip) {
 // Add user
 async function _users_add(name, key, level, filters) {
   let users = await _read("_users");
-  if (users.Item === undefined)
-    return { status: 404, error: "Users not found" };
+  if (users.Item === undefined) users = { Item: { data: {} } }; //return { status: 404, error: "Users not found" };
   users.Item.data[key] = {
     name: name,
     level: level,
@@ -422,6 +440,7 @@ async function _users_del(name) {
   }
   return { status: 404, error: "User not found" };
 }
+// General
 async function fetch(url) {
   return new Promise((resolve) => {
     https.get(url, (res) => {
