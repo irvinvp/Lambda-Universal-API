@@ -149,14 +149,19 @@ async function get(event) {
       level = await _level(event.query.token, event.ip);
       if (level.level != 99) return { status: 405, error: "access denied" };
       return await _users_del(event.query.name);
-    // Especial
     case "/api/v1/worker":
       if (event.query.vars === undefined)
         return { status: 404, error: "vars is required" };
       if (event.query.id === undefined)
         return { status: 404, error: "id is required" };
+      if (event.query.token === undefined)
+        return { status: 404, error: "token is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level.level < 0 || (event.query.id[0] == "_" && level.level != 99))
+        return { status: 405, error: "access denied" };
       return await worker1.run(
         event.query.id,
+        level.filters,
         event.query.vars.split(","),
         _read,
         _save
