@@ -96,8 +96,21 @@ async function get(event) {
           for (let x in part.Item.data) {
             for (let y in level.filters) {
               if (part.Item.data[x][y] != undefined) {
-                if (!level.filters[y].includes(part.Item.data[x][y])) {
-                  delete part.Item.data[x];
+                if (Array.isArray(part.Item.data[x][y])) {
+                  let found = false;
+                  for (let z in part.Item.data[x][y]) {
+                    if (level.filters[y].includes(part.Item.data[x][y][z])) {
+                      found = true;
+                      break;
+                    }
+                  }
+                  if (!found) {
+                    delete part.Item.data[x];
+                  }
+                } else {
+                  if (!level.filters[y].includes(part.Item.data[x][y])) {
+                    delete part.Item.data[x];
+                  }
                 }
               }
             }
