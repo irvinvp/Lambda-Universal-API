@@ -1,15 +1,20 @@
+const fs = require("fs");
+const vm = require("vm");
 const https = require("https");
 const AWS = require("aws-sdk");
 const dynamo = new AWS.DynamoDB.DocumentClient();
 const zlib = require("zlib");
 const worker1 = require("worker1");
-const { read } = require("fs");
 const table_name = "komakai"; // Nombre de la tabla DynamoDB
 const app = "_komakai";
 let token_ram = {};
 let ip_baned = {};
 let lambda_id = Math.random().toString(36).substring(2);
-// Handler [No editar]
+// Libs
+let lib1 = fs.readFileSync("moment.min.js", "utf-8");
+vm.runInThisContext(lib1, "moment.min.js");
+
+// Handler [No edit]
 exports.handler = async (event) => {
   if (event.headers["accept-encoding"].includes("gzip")) {
     let r = await main(event);
@@ -33,7 +38,7 @@ exports.handler = async (event) => {
     };
   }
 };
-// Main [No editar]
+// Main [No edit]
 async function main(event) {
   let x = {
     method: event.requestContext.http.method,
@@ -143,6 +148,8 @@ async function get(event) {
         return { status: 404, error: "name is required" };
       if (event.query.key === undefined)
         return { status: 404, error: "key is required" };
+      if (event.query.ipr === undefined)
+        return { status: 404, error: "ipr is required" };
       if (event.query.level === undefined)
         return { status: 404, error: "level is required" };
       if (event.query.token === undefined)
@@ -154,14 +161,31 @@ async function get(event) {
         event.query.name,
         event.query.key,
         event.query.level,
-        event.query.filters
+        JSON.parse(event.query.filters),
+        event.query.ipr
       );
-    case "/api/v1/users_del":
-      if (event.query.name === undefined)
-        return { status: 404, error: "name is required" };
+    case "/api/v1/users_edit":
+      if (event.query.filters === undefined)
+        return { status: 404, error: "filters is required" };
+      if (event.query.key === undefined)
+        return { status: 404, error: "key is required" };
+      if (event.query.token === undefined)
+        return { status: 404, error: "token is required" };
+      if (event.query.level === undefined)
+        return { status: 404, error: "level is required" };
       level = await _level(event.query.token, event.ip);
       if (level.level != 99) return { status: 405, error: "access denied" };
-      return await _users_del(event.query.name);
+      return await _users_edit(
+        event.query.key,
+        JSON.parse(event.query.filters),
+        event.query.level
+      );
+    case "/api/v1/users_del":
+      if (event.query.key === undefined)
+        return { status: 404, error: "key is required" };
+      level = await _level(event.query.token, event.ip);
+      if (level.level != 99) return { status: 405, error: "access denied" };
+      return await _users_del(event.query.key);
     case "/api/v1/worker":
       if (event.query.vars === undefined)
         return { status: 404, error: "vars is required" };
@@ -242,10 +266,7 @@ async function _save(id, data) {
           TableName: table_name,
           Item: {
             id: id + app,
-            data:
-              data.length < 400 * 1024
-                ? data
-                : zlib.gzipSync(data).toString("base64"),
+            data: data.length < 400 * 1024 ? data : zlib.gzipSync(data),
           },
         })
         .promise()),
@@ -319,9 +340,7 @@ async function _read(id) {
       let par_data = _safe(r.Item.data);
       if (par_data == null) {
         try {
-          r.Item.data = _safe(
-            zlib.unzipSync(Buffer.from(r.Item.data, "base64")).toString()
-          );
+          r.Item.data = _safe(zlib.unzipSync(r.Item.data).toString());
         } catch (e) {
           r.Item.data = null;
         }
@@ -385,14 +404,19 @@ async function _ip(ip) {
 // Login
 async function _login(data, ip) {
   let country = await fetch("https://ipinfo.io/" + ip + "/country");
+  country = "MX\n";
   if (country != "MX\n")
     return { status: 400, error: "access denied (region)", region: country };
   if (data.key === undefined) return { status: 404, error: "key is required" };
   let users = await _read("_users");
   if (users.Item === undefined) {
-    await _users_add("admin", data.key, 99, {});
+    await _users_add("admin", data.key, 99, {}, data.key);
     users = await _read("_users");
   } //return { status: 404, error: "Users not found" };
+  if (Object.keys(users.Item.data).length == 0) {
+    await _users_add("admin", data.key, 99, {}, data.key);
+    users = await _read("_users");
+  }
   if (users.Item.data[data.key] === undefined)
     return { status: 400, error: "key not found" };
   let token =
@@ -403,7 +427,13 @@ async function _login(data, ip) {
   users.Item.data[data.key].token = token;
   users.Item.data[data.key].ip = ip;
   await _save("_users", JSON.stringify(users.Item.data));
-  return { status: 200, token: token };
+  return {
+    status: 200,
+    token: token,
+    filters: users.Item.data[data.key].filters,
+    level: users.Item.data[data.key].level,
+    name: users.Item.data[data.key].name,
+  };
 }
 // Get level
 async function _level(token, ip) {
@@ -431,7 +461,7 @@ async function _level(token, ip) {
   return { level: -1 };
 }
 // Add user
-async function _users_add(name, key, level, filters) {
+async function _users_add(name, key, level, filters, ipr) {
   let users = await _read("_users");
   if (users.Item === undefined) users = { Item: { data: {} } }; //return { status: 404, error: "Users not found" };
   users.Item.data[key] = {
@@ -440,23 +470,35 @@ async function _users_add(name, key, level, filters) {
     token: "",
     ip: "",
     filters: filters,
+    ipr: ipr,
   };
   await _save("_users", JSON.stringify(users.Item.data));
   return { status: 200 };
 }
+// Edit user
+async function _users_edit(key, filters, level) {
+  let users = await _read("_users");
+  if (users.Item === undefined) users = { Item: { data: {} } }; //return { status: 404, error: "Users not found" };
+  if (users.Item.data[key] === undefined)
+    return { status: 404, error: "User not found" };
+  users.Item.data[key].filters = filters;
+  users.Item.data[key].level = level;
+  await _save("_users", JSON.stringify(users.Item.data));
+  token_ram[users.Item.data[key].token] = {
+    level: level,
+    ip: users.Item.data[key].ip,
+    filters: filters,
+  };
+  return { status: 200 };
+}
 // Delete user
-async function _users_del(name) {
+async function _users_del(key) {
   let users = await _read("_users");
   if (users.Item === undefined)
     return { status: 404, error: "Users not found" };
-  for (let x in users.Item.data) {
-    if (users.Item.data[x].name == name) {
-      delete users.Item.data[x];
-      await _save("_users", JSON.stringify(users.Item.data));
-      return { status: 200 };
-    }
-  }
-  return { status: 404, error: "User not found" };
+  delete users.Item.data[key];
+  await _save("_users", JSON.stringify(users.Item.data));
+  return { status: 200 };
 }
 // General
 async function fetch(url) {
