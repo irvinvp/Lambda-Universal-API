@@ -30,6 +30,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function delete_key(id, key) {
     let x = await (
       await fetch(
@@ -39,6 +41,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function push(id, data) {
     let x = await fetch(lambda + "push?id=" + id + "&token=" + token, {
       method: "POST",
@@ -47,6 +51,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function put(id, data) {
     let x = await fetch(lambda + "put?id=" + id + "&token=" + token, {
       method: "POST",
@@ -55,6 +61,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function read(id) {
     let x = await (
       await fetch(lambda + "read?id=" + id + "&token=" + token)
@@ -62,6 +70,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function login(data) {
     return await (
       await fetch(lambda + "login", {
@@ -70,6 +80,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
       })
     ).json();
   }
+```
+```
   async function worker(id, vars) {
     let x = await (
       await fetch(
@@ -79,6 +91,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function users_edit(key, filters, level) {
     let x = await (
       await fetch(
@@ -96,6 +110,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function users_del(key) {
     let x = await (
       await fetch(lambda + "users_del?token=" + token + "&key=" + key)
@@ -103,6 +119,8 @@ Todas las tablas que comiencen con guion bajo no se pueden accesar mas que por e
     if(x.status==405) location.reload();
     else return x;
   }
+```
+```
   async function users_add(name, key, filters, level, ipr) {
     let x = await (
       await fetch(
